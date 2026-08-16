@@ -1,0 +1,6 @@
+{
+  "outputMode": "stdout",
+  "launchOptions": {
+    "chromiumSandbox": false
+  }
+}
