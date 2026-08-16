@@ -1151,5 +1151,48 @@ function showToast(msg) {
 // ===== 初始化 =====
 renderGoods();
 </script>
+  // ===== 初始化 =====
+renderGoods();
+</script>
+
+<!-- 下面粘贴我给你的完整补丁代码 -->
+<script>
+// 页面加载完成，把全部数量输入框改成支持0.1小数
+window.addEventListener('load',function(){
+  setTimeout(()=>{
+    document.querySelectorAll('input[type="number"]').forEach(inp=>{
+      inp.step="0.1";
+      inp.min=0;
+    })
+    //重写加减按钮逻辑，每次±0.1，支持小数
+    document.querySelectorAll('.qty-plus').forEach(btn=>{
+      btn.onclick=function(){
+        let input=this.parentElement.querySelector('input[type="number"]');
+        let val=Number(input.value||0);
+        val=val+0.1;
+        if(val>=0){
+          input.value=val.toFixed(1);
+          //触发价格重新计算
+          input.dispatchEvent(new Event('input'));
+        }
+      }
+    })
+    document.querySelectorAll('.qty-minus').forEach(btn=>{
+      btn.onclick=function(){
+        let input=this.parentElement.querySelector('input[type="number"]');
+        let val=Number(input.value||0);
+        val=val-0.1;
+        if(val>=0){
+          input.value=val.toFixed(1);
+          input.dispatchEvent(new Event('input'));
+        }
+      }
+    })
+  },800);
+})
+</script>
+
+</body>
+</html>
 </body>
 </html>
