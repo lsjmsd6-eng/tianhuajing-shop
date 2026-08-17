@@ -893,11 +893,13 @@ function quickAdd(id) {
 function addToCart(goodId, spec, unit, price) {
   const g = GOODS.find(x => x.id === goodId);
   const key = `${goodId}_${spec}_${unit}`;
+  const isByWeight = unit.indexOf('斤') >= 0;
   const existing = cart.find(x => x.key === key);
   if (existing) {
     existing.qty += 1;
+    existing.totalPrice = isByWeight ? Math.round(existing.unitPrice * existing.qty * 100) / 100 : existing.unitPrice * existing.qty;
   } else {
-    cart.push({ key, goodId, name: g.name, spec, unit, price, qty: 1, img: g.img });
+    cart.push({ key, goodId, name: g.name, spec, unit, unitPrice: price, qty: 1, totalPrice: price, img: g.img, isByWeight });
   }
   updateBadge();
 }
@@ -922,6 +924,8 @@ function openDetail(id) {
   let selectedSpec = g.specs.length > 1 ? 1 : 0;
   let selectedUnit = 0;
   let qty = 1;
+  // 判断是否按斤卖（单位名包含"斤"）
+  let isByWeight = g.units[0].name.indexOf('斤') >= 0;
 
   function render() {
     panel.innerHTML = `
@@ -931,7 +935,7 @@ function openDetail(id) {
       </div>
       <div class="detail-body">
         <div class="detail-name">${g.name}</div>
-        <div class="detail-price"><small>¥</small>${g.units[selectedUnit].price}</div>
+        <div class="detail-price"><small>¥</small>${g.units[selectedUnit].price}<small style="font-size:13px;">/${g.units[selectedUnit].name}</small></div>
         <div class="detail-desc">${g.desc}</div>
         ${g.specs.length > 1 ? `
         <div class="detail-specs">
@@ -951,13 +955,21 @@ function openDetail(id) {
           </div>
         </div>
         <div class="qty-row">
-          <div class="spec-label" style="margin:0">数量</div>
+          <div class="spec-label" style="margin:0">${isByWeight ? '斤两' : '数量'}</div>
+          ${isByWeight ? `
+          <div style="display:flex;align-items:center;gap:8px;flex:1;">
+            <input type="number" id="qty-input" value="${qty}" step="0.1" min="0.1" style="flex:1;border:1.5px solid rgba(201,162,39,0.4);border-radius:8px;padding:8px 12px;font-size:16px;font-weight:700;color:var(--red-deep);text-align:center;" oninput="onQtyInput(this.value)">
+            <span style="font-size:13px;color:var(--brown-med);">斤</span>
+          </div>
+          ` : `
           <div class="qty-control">
             <button class="qty-btn" onclick="changeQty(-1)">−</button>
             <span class="qty-val">${qty}</span>
             <button class="qty-btn" onclick="changeQty(1)">+</button>
           </div>
+          `}
         </div>
+        ${isByWeight ? `<div style="font-size:11px;color:var(--gray);margin-bottom:12px;">可输入任意斤两，如0.5斤、1.2斤等</div>` : ''}
         <button class="add-cart-btn" onclick="confirmAdd()">加入清单</button>
       </div>
     `;
@@ -966,20 +978,26 @@ function openDetail(id) {
   window.selectSpec = function(i) { selectedSpec = i; render(); };
   window.selectUnit = function(i) { selectedUnit = i; render(); };
   window.changeQty = function(d) { qty = Math.max(1, qty + d); render(); };
+  window.onQtyInput = function(val) { qty = parseFloat(val) || 0; };
   window.confirmAdd = function() {
     const spec = g.specs[selectedSpec].name;
     const unit = g.units[selectedUnit].name;
-    const price = g.units[selectedUnit].price;
+    const unitPrice = g.units[selectedUnit].price;
+    if (isByWeight && qty <= 0) { showToast('请输入斤两'); return; }
+    if (!isByWeight && qty < 1) qty = 1;
+    // 按斤的按比例算价，按个的直接乘
+    const totalPrice = isByWeight ? Math.round(unitPrice * qty * 100) / 100 : unitPrice * qty;
     const key = `${g.id}_${spec}_${unit}`;
     const existing = cart.find(x => x.key === key);
     if (existing) {
       existing.qty += qty;
+      existing.totalPrice = Math.round(existing.unitPrice * existing.qty * 100) / 100;
     } else {
-      cart.push({ key, goodId: g.id, name: g.name, spec, unit, price, qty, img: g.img });
+      cart.push({ key, goodId: g.id, name: g.name, spec, unit, unitPrice, qty, totalPrice, img: g.img, isByWeight });
     }
     updateBadge();
     closeDetail();
-    showToast(`已加入清单（${qty}件）`);
+    showToast(`已加入清单（${qty}${isByWeight ? '斤' : '个'}）`);
   };
 
   render();
@@ -1002,24 +1020,31 @@ function renderCart() {
     return;
   }
 
-  el.innerHTML = cart.map((item, idx) => `
+  el.innerHTML = cart.map((item, idx) => {
+    const isW = item.isByWeight;
+    const lineTotal = isW ? (Math.round(item.unitPrice * item.qty * 100) / 100) : (item.unitPrice * item.qty);
+    return `
     <div class="cart-item">
       <div class="${item.img ? '' : 'placeholder-img'} cart-item-img">
         ${item.img ? `<img src="${item.img}" class="cart-item-img" style="margin:0">` : '商品图'}
       </div>
       <div class="cart-item-info">
         <div class="cart-item-name">${item.name}</div>
-        <div class="cart-item-spec">${item.spec} · ${item.unit}</div>
-        <div class="cart-item-price">¥${item.price}</div>
+        <div class="cart-item-spec">${item.spec} · ${item.unit} ¥${item.unitPrice}/${item.unit}</div>
+        <div class="cart-item-price">¥${lineTotal}</div>
       </div>
       <div class="cart-item-qty">
-        <button class="cart-qty-btn" onclick="cartQty(${idx}, -1)">−</button>
-        <span class="cart-qty-val">${item.qty}</span>
-        <button class="cart-qty-btn" onclick="cartQty(${idx}, 1)">+</button>
+        ${isW ? `
+          <input type="number" value="${item.qty}" step="0.1" min="0.1" style="width:50px;border:1px solid rgba(201,162,39,0.4);border-radius:6px;padding:4px;text-align:center;font-size:13px;font-weight:700;color:var(--red-deep);" onchange="cartQtyInput(${idx}, this.value)">
+        ` : `
+          <button class="cart-qty-btn" onclick="cartQty(${idx}, -1)">−</button>
+          <span class="cart-qty-val">${item.qty}</span>
+          <button class="cart-qty-btn" onclick="cartQty(${idx}, 1)">+</button>
+        `}
       </div>
       <span class="cart-delete" onclick="cartDelete(${idx})">×</span>
     </div>
-  `).join('') + `
+  `;}).join('') + `
     <div class="order-note">
       <label>快递公司</label>
       <div class="express-options" id="express-opts">
@@ -1034,8 +1059,7 @@ function renderCart() {
     </div>
     <div class="cart-summary">
       <div class="summary-row"><span>商品种类</span><span>${cart.length} 种</span></div>
-      <div class="summary-row"><span>总件数</span><span>${cart.reduce((s,x)=>s+x.qty,0)} 件</span></div>
-      <div class="summary-row summary-total"><span>商品合计</span><span>¥${cart.reduce((s,x)=>s+x.price*x.qty,0)}</span></div>
+      <div class="summary-row summary-total"><span>商品合计</span><span>¥${cart.reduce((s,x)=>s+(x.isByWeight?Math.round(x.unitPrice*x.qty*100)/100:x.unitPrice*x.qty),0)}</span></div>
       <div class="summary-row" style="font-size:11px;color:var(--gray);margin-top:4px;"><span>快递费</span><span>到付/另算</span></div>
     </div>
     <button class="gen-order-btn" onclick="generateOrder()">生成订单</button>
@@ -1045,6 +1069,14 @@ function renderCart() {
 window.cartQty = function(idx, d) {
   cart[idx].qty += d;
   if (cart[idx].qty <= 0) cart.splice(idx, 1);
+  updateBadge();
+  renderCart();
+};
+
+window.cartQtyInput = function(idx, val) {
+  var v = parseFloat(val) || 0;
+  if (v <= 0) { cart.splice(idx, 1); }
+  else { cart[idx].qty = v; }
   updateBadge();
   renderCart();
 };
@@ -1068,12 +1100,15 @@ window.generateOrder = function() {
   var address = document.getElementById('order-address')?.value || '';
   var expressEl = document.querySelector('#express-opts .active');
   var express = expressEl ? expressEl.getAttribute('data-express') : '中通快递';
-  var total = cart.reduce((s, x) => s + x.price * x.qty, 0);
+  var total = cart.reduce((s, x) => s + (x.isByWeight ? Math.round(x.unitPrice * x.qty * 100) / 100 : x.unitPrice * x.qty), 0);
+  total = Math.round(total * 100) / 100;
 
   var text = '【天花井】订单\n';
   text += '━━━━━━━━━━\n';
   cart.forEach((item, i) => {
-    text += (i + 1) + '. ' + item.name + '（' + item.spec + '·' + item.unit + '）×' + item.qty + ' — ¥' + (item.price * item.qty) + '\n';
+    var lineTotal = item.isByWeight ? (Math.round(item.unitPrice * item.qty * 100) / 100) : (item.unitPrice * item.qty);
+    var qtyStr = item.isByWeight ? item.qty + '斤' : item.qty + '个';
+    text += (i + 1) + '. ' + item.name + '（' + item.spec + '）' + qtyStr + ' — ¥' + lineTotal + '\n';
   });
   text += '━━━━━━━━━━\n';
   text += '商品合计：¥' + total + '\n';
