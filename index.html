@@ -1046,7 +1046,12 @@ function renderCart() {
     </div>
   `;}).join('') + `
     <div class="order-note">
-      <label>快递公司</label>
+      <label>真空包装</label>
+      <div class="express-options" id="package-opts">
+        <div class="spec-opt active" data-package="一斤装两袋" onclick="selectPackage(this)">一斤装两袋</div>
+        <div class="spec-opt" data-package="一斤装三袋" onclick="selectPackage(this)">一斤装三袋</div>
+      </div>
+      <label style="margin-top:10px;">快递公司</label>
       <div class="express-options" id="express-opts">
         <div class="spec-opt active" data-express="中通快递" onclick="selectExpress(this)">中通快递</div>
         <div class="spec-opt" data-express="顺丰快递" onclick="selectExpress(this)">顺丰快递</div>
@@ -1092,6 +1097,11 @@ window.selectExpress = function(el) {
   el.classList.add('active');
 };
 
+window.selectPackage = function(el) {
+  el.parentElement.querySelectorAll('.spec-opt').forEach(function(o) { o.classList.remove('active'); });
+  el.classList.add('active');
+};
+
 // ===== 生成订单 =====
 let lastOrderText = '';
 window.generateOrder = function() {
@@ -1100,6 +1110,8 @@ window.generateOrder = function() {
   var address = document.getElementById('order-address')?.value || '';
   var expressEl = document.querySelector('#express-opts .active');
   var express = expressEl ? expressEl.getAttribute('data-express') : '中通快递';
+  var packageEl = document.querySelector('#package-opts .active');
+  var packageType = packageEl ? packageEl.getAttribute('data-package') : '一斤装两袋';
   var total = cart.reduce((s, x) => s + (x.isByWeight ? Math.round(x.unitPrice * x.qty * 100) / 100 : x.unitPrice * x.qty), 0);
   total = Math.round(total * 100) / 100;
 
@@ -1112,6 +1124,7 @@ window.generateOrder = function() {
   });
   text += '━━━━━━━━━━\n';
   text += '商品合计：¥' + total + '\n';
+  text += '真空包装：' + packageType + '\n';
   text += '快递费：到付/另算（' + express + '）\n';
   text += '\n收货地址：' + (address || '【请填写地址】') + '\n';
   if (note) text += '备注：' + note + '\n';
